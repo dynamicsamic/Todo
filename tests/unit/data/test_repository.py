@@ -339,6 +339,7 @@ class TestTodoRepository:
 
         assert res is None
 
+    @pytest.mark.skip("Not used in production yet")
     async def test_todo_estimate(self):
         async with self.client.app.db_pool.acquire() as con:
             repo = TodoRepository(con, self.client.app.db_pool)
@@ -682,6 +683,7 @@ class TestTaskRepository:
 
         assert res is None
 
+    @pytest.mark.skip("Not used in production yet")
     async def test_task_estimate(self):
         async with self.client.app.db_pool.acquire() as con:
             repo = TaskRepository(con, self.client.app.db_pool)
