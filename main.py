@@ -7,12 +7,12 @@ from quart_schema import QuartSchema, ResponseSchemaValidationError
 from src.data.db import init_db
 from src.settings import settings
 from src.utils import AsyncpgQueryLogger
-from src.web.api import bp
+from src.web.api import bp as api_bp
 
 app = Quart(__name__)
 app.debug = settings.DEBUG
 QuartSchema(app, convert_casing=True, conversion_preference="pydantic")
-app.register_blueprint(bp, url_prefix="/todos")
+app.register_blueprint(api_bp, url_prefix="/api/v1/todos")
 
 logger = logging.getLogger(__name__)
 query_logger = AsyncpgQueryLogger(logger)
@@ -20,7 +20,14 @@ query_logger = AsyncpgQueryLogger(logger)
 
 @app.before_serving
 async def create_db():
-    await init_db(settings.PG_USER, settings.PG_PASSWORD, settings.PG_DB)
+    logger.info("Initializing DB")
+    await init_db(
+        settings.PG_USER,
+        settings.PG_PASSWORD,
+        settings.PG_DB,
+        settings.PG_HOST,
+        settings.PG_PORT,
+    )
 
 
 @app.before_serving
@@ -61,6 +68,6 @@ async def handle_response_validation_error():
     return {"error": "VALIDATION"}, 500
 
 
-@app.route("/")
+@app.route("/health", methods=["GET"])
 async def health_check():
     return {"healthy": True}
