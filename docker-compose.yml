@@ -1,0 +1,46 @@
+services:
+  todo:
+    build:
+      context: .
+    command: hypercorn --config hypercorn.toml main:app
+    depends_on:
+      - db
+    ports:
+      - 8080:8080
+    volumes:
+      - ./src:/app/src
+    healthcheck:
+      test: ["CMD-SHELL", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    environment:
+      - PG_USER=test_user
+      - PG_PASSWORD=test_pswd
+      - PG_HOST=todo_db
+      - PG_PORT=5432
+      - PG_DB=test_db
+
+  db:
+    image: postgres:16
+    container_name: todo_db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=test_user
+      - POSTGRES_PASSWORD=test_pswd
+      - POSTGRES_DB=template1
+    ports:
+      - 5432:5432
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d test_db -U test_user"]
+      interval: 1s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  postgres_data:
