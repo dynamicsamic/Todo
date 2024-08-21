@@ -1,18 +1,18 @@
 FROM python:3.12.3-slim-bookworm
 
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-COPY main.py /app
-COPY hypercorn.toml /app
-COPY requirements.txt /app
+RUN pip install -U pdm
+ENV PDM_CHECK_UPDATE=false
 
-RUN pip install --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt \
-    && rm -rf /root/.cache
+COPY main.py hypercorn.toml pdm.lock pyproject.toml /app/
 
-COPY src/ /app
+RUN pdm install --check --prod --no-editable
+
+COPY src/ /app/src
+
+ENV PATH="/app/.venv/bin:$PATH"
 
 EXPOSE 8080

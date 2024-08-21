@@ -2,7 +2,7 @@ services:
   todo:
     build:
       context: .
-    command: hypercorn --config hypercorn.toml main:app
+    command: pdm start_app
     depends_on:
       - db
     ports:
@@ -10,7 +10,7 @@ services:
     volumes:
       - ./src:/app/src
     healthcheck:
-      test: ["CMD-SHELL", "curl", "-f", "http://localhost:8080/health"]
+      test: curl --fail http://localhost:8080/health || exit 1
       interval: 10s
       timeout: 5s
       retries: 5

@@ -58,6 +58,12 @@ test = [
 init_db = "quart --app=main:app init_db"
 migrate = "quart --app=main:app migrate -f"
 migrate_all = "quart --app=main:app migrate -a"
-run_app = "quart --app=main:app run"
+prepare_db = {composite = ["init_db", "migrate_all"]}
+load_test_data = "quart --app=main:app load_data"
 drop_db = "quart --app=main:app migrate -ad"
-start_app = "quart --app=main:app create_test_app"
+
+dev_server = "quart --app=main:app run"
+prod_server = "hypercorn --config hypercorn.toml main:app"
+# start_app = "quart --app=main:app create_test_app"
+start_dev_app = {composite = ["prepare_db","load_test_data", "dev_server"]}
+start_app = {composite = ["prepare_db", "prod_server"]}
