@@ -1,10 +1,17 @@
 import datetime as dt
 from typing import Generator
 
+import asyncpg
 import pytest
 import pytest_asyncio
-from quart.testing import QuartClient
 
+from src.data.db import (
+    apply_migration,
+    check_db_created,
+    drop_db,
+    get_connection_url,
+    load_all,
+)
 from src.data.repository import TaskRepository, TodoRepository
 from src.data.result import TaskRow, TodoRow
 from src.domain.types import TaskPriority, TaskStatus, TodoStatus
@@ -13,7 +20,6 @@ from src.utils import now
 from tests.fixtures import (
     TASK_SAMPLE_SIZE,
     TODO_SAMPLE_SIZE,
-    test_client,  # noqa
 )
 
 pytestmark = pytest.mark.asyncio
@@ -21,20 +27,36 @@ pytestmark = pytest.mark.asyncio
 DEFAULT_LIMIT = settings.DEFAULT_PAGE_LIMIT
 
 
+@pytest_asyncio.fixture(scope="module")
+async def prepare_db():
+    await check_db_created()
+    await apply_migration("_000_initial")
+    await load_all(TODO_SAMPLE_SIZE, TASK_SAMPLE_SIZE)
+    yield
+    await drop_db()
+
+
+@pytest_asyncio.fixture(scope="module")
+async def pool(prepare_db):
+    pool = await asyncpg.create_pool(get_connection_url())
+    yield pool
+    await pool.close()
+
+
 class TestTodoRepository:
-    client: QuartClient = None
+    pool: asyncpg.Pool = None
     new_todo_id: int = None
 
     @pytest_asyncio.fixture(autouse=True, scope="module")
-    async def setup(self, test_client):  # noqa
-        self.__class__.client = test_client
+    async def setup(self, pool):
+        self.__class__.pool = pool
 
     def get_todo_id(self) -> int:
         return self.__class__.new_todo_id or TODO_SAMPLE_SIZE
 
     async def test_fetch_todos_without_arguments_uses_default_limit(self):
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TodoRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TodoRepository(con, self.pool)
             res = await repo.fetch_many()
 
         assert isinstance(res, Generator)
@@ -45,8 +67,8 @@ class TestTodoRepository:
     async def test_fetch_todos_with_custom_limit(self):
         limit = 3
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TodoRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TodoRepository(con, self.pool)
             res = await repo.fetch_many(limit=limit)
 
         todos = list(res)
@@ -56,8 +78,8 @@ class TestTodoRepository:
     async def test_fetch_todos_with_custom_offset(self):
         offset = 2
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TodoRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TodoRepository(con, self.pool)
             res = await repo.fetch_many(offset=offset)
 
         todos = list(res)
@@ -65,8 +87,8 @@ class TestTodoRepository:
         assert all(todo.todo_id > offset for todo in todos)
 
     async def test_fetch_todos_with_custom_ordering(self):
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TodoRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TodoRepository(con, self.pool)
             res = await repo.fetch_many(order_by=["todo_id DESC"])
 
         todos = list(res)
@@ -78,8 +100,8 @@ class TestTodoRepository:
     async def test_fetch_todos_with_one_filter_single_value(self):
         filters = {"todo_id": [1]}
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TodoRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TodoRepository(con, self.pool)
             res = await repo.fetch_many(filters=filters)
 
         todos = list(res)
@@ -90,8 +112,8 @@ class TestTodoRepository:
     async def test_fetch_todos_with_one_filter_multiple_values(self):
         filters = {"todo_id": [1, 2, 3]}
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TodoRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TodoRepository(con, self.pool)
             res = await repo.fetch_many(filters=filters)
 
         todos = list(res)
@@ -104,8 +126,8 @@ class TestTodoRepository:
     async def test_fetch_todos_with_multiple_filters_unique_combination(self):
         filters = {"todo_id": [1, 2, 3], "owner": ["todo1", "invalid"]}
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TodoRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TodoRepository(con, self.pool)
             res = await repo.fetch_many(filters=filters)
 
         todos = list(res)
@@ -116,16 +138,16 @@ class TestTodoRepository:
     async def test_fetch_todos_with_multiple_filters_generic_combination(self):
         filters = {"todo_id": [1, 2, 3], "status": [TodoStatus.ACTIVE]}
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TodoRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TodoRepository(con, self.pool)
             res = await repo.fetch_many(limit=10, filters=filters)
 
         todos = list(res)
         assert all(todo.status == TodoStatus.ACTIVE for todo in todos)
 
     async def test_fetch_todos_do_not_exist(self):
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TodoRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TodoRepository(con, self.pool)
             res = await repo.fetch_many(filters={"todo_id": [-1]})
 
         assert len(list(res)) == 0
@@ -133,8 +155,8 @@ class TestTodoRepository:
     async def test_fetch_existing_todo_without_prefetch(self):
         todo_id = 1
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TodoRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TodoRepository(con, self.pool)
             todo = await repo.fetch_one(todo_id)
 
         assert isinstance(todo, TodoRow)
@@ -149,8 +171,8 @@ class TestTodoRepository:
         todo_id = 1
         prefetch = 5
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TodoRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TodoRepository(con, self.pool)
             todo = await repo.fetch_one(todo_id, prefetch)
 
         assert isinstance(todo, TodoRow)
@@ -163,21 +185,21 @@ class TestTodoRepository:
         assert all(task.todo_id == todo_id for task in tasks)
 
     async def test_fetch_todo_does_not_exist(self):
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TodoRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TodoRepository(con, self.pool)
             todo = await repo.fetch_one(-1, 5)
 
         assert todo is None
 
     async def test_insert_todo_with_valid_args_without_tasks(self):
-        async with self.client.app.db_pool.acquire() as con:
+        async with self.pool.acquire() as con:
             initial_count = await con.fetchval(
                 "SELECT count(todo_id) FROM todos"
             )
 
         data = {"owner": "helen", "status": TodoStatus.INACTIVE}
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TodoRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TodoRepository(con, self.pool)
             todo = await repo.insert_one(**data)
 
         assert isinstance(todo, TodoRow)
@@ -190,7 +212,7 @@ class TestTodoRepository:
 
         self.__class__.new_todo_id = todo.todo_id
 
-        async with self.client.app.db_pool.acquire() as con:
+        async with self.pool.acquire() as con:
             current_count = await con.fetchval(
                 "SELECT count(todo_id) FROM todos"
             )
@@ -200,22 +222,22 @@ class TestTodoRepository:
     @pytest.mark.xfail(strict=True)
     async def test_insert_todo_invalid_column_name(self):
         invalid_data = {"invalid": "helen", "status": TodoStatus.INACTIVE}
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TodoRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TodoRepository(con, self.pool)
             await repo.insert_one(**invalid_data)
 
     @pytest.mark.xfail(strict=True)
     async def test_insert_todo_invalid_column_type(self):
         invalid_data = {"owner": [], "status": TodoStatus.INACTIVE}
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TodoRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TodoRepository(con, self.pool)
             await repo.insert_one(**invalid_data)
 
     async def test_update_existing_todo_with_valid_data(self):
         todo_id = self.get_todo_id()
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TodoRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TodoRepository(con, self.pool)
             original_todo = await repo.fetch_one(todo_id)
 
         status = (
@@ -230,8 +252,8 @@ class TestTodoRepository:
             "updated_at": updated_at,
         }
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TodoRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TodoRepository(con, self.pool)
             updated_todo = await repo.update_one(todo_id, update_data)
 
         assert updated_todo.todo_id == original_todo.todo_id
@@ -255,15 +277,15 @@ class TestTodoRepository:
             "status": original_todo.status,
             "updated_at": original_todo.updated_at,
         }
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TodoRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TodoRepository(con, self.pool)
             await repo.update_one(todo_id, rollback_data)
 
     async def test_update_todo_does_not_exist(self):
         update_data = {"owner": "steve"}
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TodoRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TodoRepository(con, self.pool)
             res = await repo.update_one(-1, update_data)
 
         assert res is None
@@ -272,22 +294,22 @@ class TestTodoRepository:
     async def test_update_existing_todo_with_invalid_column_name(self):
         invalid_data = {"Invlaid": "steve", "status": TodoStatus.ACTIVE}
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TodoRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TodoRepository(con, self.pool)
             await repo.update_one(1, invalid_data)
 
     @pytest.mark.xfail(strict=True)
     async def test_update_existing_todo_with_invalid_column_type(self):
         invalid_data = {"owner": [], "status": TodoStatus.ACTIVE}
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TodoRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TodoRepository(con, self.pool)
             await repo.update_one(1, invalid_data)
 
     @pytest.mark.xfail(strict=True)
     async def test_update_existing_todo_with_empty_data(self):
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TodoRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TodoRepository(con, self.pool)
             await repo.update_one(1, {})
 
     async def test_delete_existing_todo(self):
@@ -300,32 +322,32 @@ class TestTodoRepository:
         }
 
         todo_id = self.get_todo_id()
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TaskRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TaskRepository(con, self.pool)
             task = await repo.insert_one(**task_data, todo_id=todo_id)
 
         assert task.todo_id == todo_id
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TodoRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TodoRepository(con, self.pool)
             todo = await repo.fetch_one(todo_id=todo_id, prefetch_tasks=20)
 
         assert len(list(todo.tasks)) == 1
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TodoRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TodoRepository(con, self.pool)
             res = await repo.delete_one(todo_id)
 
         assert res == todo_id
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TodoRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TodoRepository(con, self.pool)
             todo = await repo.fetch_one(todo_id=todo_id, prefetch_tasks=20)
 
         assert todo is None
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TaskRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TaskRepository(con, self.pool)
             task = await repo.fetch_one(task.task_id)
 
         assert task is None
@@ -333,31 +355,31 @@ class TestTodoRepository:
     async def test_delete_todo_does_not_exist(self):
         todo_id = -1
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TodoRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TodoRepository(con, self.pool)
             res = await repo.delete_one(todo_id)
 
         assert res is None
 
     @pytest.mark.skip("Not used in production yet")
     async def test_todo_estimate(self):
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TodoRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TodoRepository(con, self.pool)
             estimate = await repo.estimate()
 
-        async with self.client.app.db_pool.acquire() as con:
+        async with self.pool.acquire() as con:
             count = await con.fetchval("SELECT count(todo_id) FROM todos")
 
         assert estimate == count
 
 
 class TestTaskRepository:
-    client: QuartClient = None
+    pool: asyncpg.Pool = None
     new_task_id: int = None
 
     @pytest_asyncio.fixture(autouse=True, scope="module")
-    async def setup(self, test_client):  # noqa
-        self.__class__.client = test_client
+    async def setup(self, pool):
+        self.__class__.pool = pool
 
     def get_task_id(self) -> int:
         return self.new_task_id or TASK_SAMPLE_SIZE
@@ -374,13 +396,13 @@ class TestTaskRepository:
             "priority": TaskPriority.HIGH,
         }
 
-        async with self.client.app.db_pool.acquire() as con:
+        async with self.pool.acquire() as con:
             initial_count = await con.fetchval(
                 "SELECT count(task_id) FROM tasks"
             )
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TaskRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TaskRepository(con, self.pool)
             task = await repo.insert_one(**data)
 
         assert isinstance(task, TaskRow)
@@ -393,7 +415,7 @@ class TestTaskRepository:
         assert task.status == data["status"]
         assert task.priority == data["priority"]
 
-        async with self.client.app.db_pool.acquire() as con:
+        async with self.pool.acquire() as con:
             current_count = await con.fetchval(
                 "SELECT count(task_id) FROM tasks"
             )
@@ -413,8 +435,8 @@ class TestTaskRepository:
             "priority": TaskPriority.HIGH,
         }
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TaskRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TaskRepository(con, self.pool)
             await repo.insert_one(**no_due_data)
 
     @pytest.mark.xfail(strict=True)
@@ -430,8 +452,8 @@ class TestTaskRepository:
             "priority": TaskPriority.HIGH,
         }
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TaskRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TaskRepository(con, self.pool)
             await repo.insert_one(**invlaid_category_col)
 
     @pytest.mark.xfail(strict=True)
@@ -447,15 +469,15 @@ class TestTaskRepository:
             "priority": TaskPriority.HIGH,
         }
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TaskRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TaskRepository(con, self.pool)
             await repo.insert_one(**invlaid_todo_id_type)
 
     async def test_fetch_existing_task(self):
         task_id = 1
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TaskRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TaskRepository(con, self.pool)
             task = await repo.fetch_one(task_id)
 
         assert isinstance(task, TaskRow)
@@ -470,15 +492,15 @@ class TestTaskRepository:
         assert task.updated_at
 
     async def test_fetch_task_does_not_exist(self):
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TaskRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TaskRepository(con, self.pool)
             task = await repo.fetch_one(-1)
 
         assert task is None
 
     async def test_fetch_tasks_without_arguments_uses_default_limit(self):
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TaskRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TaskRepository(con, self.pool)
             res = await repo.fetch_many()
 
         assert isinstance(res, Generator)
@@ -489,8 +511,8 @@ class TestTaskRepository:
     async def test_fetch_tasks_with_custom_limit(self):
         limit = 3
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TaskRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TaskRepository(con, self.pool)
             res = await repo.fetch_many(limit=limit)
 
         tasks = list(res)
@@ -500,8 +522,8 @@ class TestTaskRepository:
     async def test_fetch_tasks_with_custom_offset(self):
         offset = 2
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TaskRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TaskRepository(con, self.pool)
             res = await repo.fetch_many(offset=offset)
 
         tasks = list(res)
@@ -509,8 +531,8 @@ class TestTaskRepository:
         assert all(task.task_id > offset for task in tasks)
 
     async def test_fetch_tasks_with_custom_ordering(self):
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TaskRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TaskRepository(con, self.pool)
             res = await repo.fetch_many(order_by=["task_id DESC"])
 
         tasks = list(res)
@@ -522,8 +544,8 @@ class TestTaskRepository:
     async def test_fetch_tasks_with_one_filter_single_value(self):
         filters = {"task_id": [1]}
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TaskRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TaskRepository(con, self.pool)
             res = await repo.fetch_many(filters=filters)
 
         tasks = list(res)
@@ -534,8 +556,8 @@ class TestTaskRepository:
     async def test_fetch_tasks_with_one_filter_multiple_values(self):
         filters = {"task_id": [1, 2, 3]}
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TaskRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TaskRepository(con, self.pool)
             res = await repo.fetch_many(filters=filters)
 
         tasks = list(res)
@@ -555,8 +577,8 @@ class TestTaskRepository:
             ],
         }
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TaskRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TaskRepository(con, self.pool)
             res = await repo.fetch_many(filters=filters)
 
         tasks = list(res)
@@ -571,16 +593,16 @@ class TestTaskRepository:
             "todo_id": [1, 2, 3],
         }
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TaskRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TaskRepository(con, self.pool)
             res = await repo.fetch_many(limit=10, filters=filters)
 
         tasks = list(res)
         assert all(task.status == TaskStatus.COMPLETE for task in tasks)
 
     async def test_fetch_tasks_do_not_exist(self):
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TaskRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TaskRepository(con, self.pool)
             res = await repo.fetch_many(filters={"task_id": [-1]})
 
         assert len(list(res)) == 0
@@ -588,8 +610,8 @@ class TestTaskRepository:
     async def test_update_existing_task_with_valid_data(self):
         task_id = self.get_task_id()
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TaskRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TaskRepository(con, self.pool)
             original_task = await repo.fetch_one(task_id)
 
         status = None
@@ -603,8 +625,8 @@ class TestTaskRepository:
         due = now()
         update_data = {"brief": "test_brief", "status": status, "due": due}
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TaskRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TaskRepository(con, self.pool)
             updated_todo = await repo.update_one(task_id, update_data)
 
         assert updated_todo.todo_id == original_task.todo_id
@@ -624,15 +646,15 @@ class TestTaskRepository:
             "status": original_task.status,
             "due": original_task.due,
         }
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TaskRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TaskRepository(con, self.pool)
             updated_todo = await repo.update_one(task_id, rollback_data)
 
     async def test_update_task_does_not_exist(self):
         update_data = {"brief": "test_brief"}
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TaskRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TaskRepository(con, self.pool)
             res = await repo.update_one(-1, update_data)
 
         assert res is None
@@ -641,35 +663,35 @@ class TestTaskRepository:
     async def test_update_existing_task_with_invalid_column_name(self):
         invalid_data = {"Invlaid": "test_bried", "status": TaskStatus.COMPLETE}
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TaskRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TaskRepository(con, self.pool)
             await repo.update_one(1, invalid_data)
 
     @pytest.mark.xfail(strict=True)
     async def test_update_existing_task_with_invalid_column_type(self):
         invalid_data = {"brief": [], "status": TaskStatus.COMPLETE}
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TaskRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TaskRepository(con, self.pool)
             await repo.update_one(1, invalid_data)
 
     @pytest.mark.xfail(strict=True)
     async def test_update_existing_task_with_empty_data(self):
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TaskRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TaskRepository(con, self.pool)
             await repo.update_one(1, {})
 
     async def test_delete_existing_task(self):
         task_id = self.get_task_id()
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TaskRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TaskRepository(con, self.pool)
             res = await repo.delete_one(task_id)
 
         assert res == task_id
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TaskRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TaskRepository(con, self.pool)
             task = await repo.fetch_one(task_id)
 
         assert task is None
@@ -677,19 +699,19 @@ class TestTaskRepository:
     async def test_delete_task_does_not_exist(self):
         task_id = -1
 
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TaskRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TaskRepository(con, self.pool)
             res = await repo.delete_one(task_id)
 
         assert res is None
 
     @pytest.mark.skip("Not used in production yet")
     async def test_task_estimate(self):
-        async with self.client.app.db_pool.acquire() as con:
-            repo = TaskRepository(con, self.client.app.db_pool)
+        async with self.pool.acquire() as con:
+            repo = TaskRepository(con, self.pool)
             estimate = await repo.estimate()
 
-        async with self.client.app.db_pool.acquire() as con:
+        async with self.pool.acquire() as con:
             count = await con.fetchval("SELECT count(task_id) FROM tasks")
 
         assert estimate == count
