@@ -1,8 +1,11 @@
+import importlib
 import logging
+from typing import Literal
 
 import asyncpg
 
 from src.domain.types import TaskPriority, TaskStatus, TodoStatus
+from src.settings import settings
 from src.utils import AsyncpgQueryLogger, now, random_choice_enum
 
 logger = logging.getLogger(__name__)
@@ -11,97 +14,61 @@ simple_logger = AsyncpgQueryLogger(logger, detailed=False)
 detailed_logger = AsyncpgQueryLogger(logger)
 
 
-create_todo_status_qry = """
-    DO $$ BEGIN
-        CREATE TYPE todo_status AS ENUM ('active', 'inactive');
-    EXCEPTION
-        WHEN duplicate_object THEN null;
-    END $$;
-"""
-
-create_task_status_qry = """
-    DO $$ BEGIN
-        CREATE TYPE task_status AS ENUM ('pending', 'complete', 'postponed');
-    EXCEPTION
-        WHEN duplicate_object THEN null;
-    END $$;
-"""
-
-create_task_priority_qry = """
-    DO $$ BEGIN
-        CREATE TYPE task_priority AS ENUM ('low', 'medium', 'high');
-    EXCEPTION
-        WHEN duplicate_object THEN null;
-    END $$;
-"""
+def get_connection_url(
+    user: str = settings.PG_USER,
+    password: str = settings.PG_PASSWORD,
+    database: str = settings.PG_DB,
+    host: str = settings.PG_HOST,
+    port: int = settings.PG_PORT,
+) -> str:
+    return f"postgresql://{user}:{password}@{host}:{port}/{database}"
 
 
-create_tasks_table_qry = """
-    DROP TABLE IF EXISTS tasks;
-    CREATE TABLE tasks 
-        (
-            task_id serial PRIMARY KEY,
-            brief varchar(300) NOT NULL,
-            todo_id int NOT NULL REFERENCES todos(todo_id) ON DELETE CASCADE,
-            contents text,
-            status task_status NOT NULL DEFAULT 'pending',
-            priority task_priority NOT NULL DEFAULT 'low',
-            category varchar(100) NOT NULL,
-            due timestamptz NOT NULL,
-            created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP, 
-            updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
-        
-        )
-"""
-
-create_todos_table_qry = """
-    DROP TABLE IF EXISTS todos CASCADE;
-    CREATE TABLE todos 
-        (
-            todo_id serial PRIMARY KEY, 
-            owner varchar(120) UNIQUE NOT NULL, 
-            status todo_status NOT NULL,
-            created_at timestamptz NOT NULL DEFAULT NOW(), 
-            updated_at timestamptz NOT NULL DEFAULT NOW()
-        );
-"""
-
-
-async def init_db(
-    user: str,
-    password: str,
-    database: str,
-    host: str = "localhost",
-    port: int = 5432,
+async def check_db_created(
+    user: str = settings.PG_USER,
+    password: str = settings.PG_PASSWORD,
+    database: str = settings.PG_DB,
+    host: str = settings.PG_HOST,
+    port: int = settings.PG_PORT,
 ) -> None:
+    logger.info(f"Connecting to database {database}")
     try:
-        conn = await asyncpg.connect(
-            user=user,
-            password=password,
-            database=database,
-            host=host,
-            port=port,
-        )
+        await asyncpg.connect(get_connection_url(user, password, database, host, port))
     except asyncpg.InvalidCatalogNameError:
+        logger.info(
+            f"Connection to database {database} FAILED. Connecting "
+            f"to default `postgres` database to create {database} db."
+        )
         conn = await asyncpg.connect(
-            user=user,
-            password=password,
-            host=host,
-            port=port,
-            database="template1",
+            get_connection_url(user, password, "postgres", host, port)
         )
-        await conn.execute(f"CREATE DATABASE {database};")
+        with conn.query_logger(simple_logger):
+            await conn.execute(f"CREATE DATABASE {database};")
+            await conn.close()
 
-    with conn.query_logger(simple_logger):
-        await conn.execute(
-            f"ALTER DATABASE {database} SET timezone TO 'Europe/Moscow';"
+        logger.info(f"Database {database} created.")
+
+
+async def apply_migration(
+    file: str | None = None, type_: Literal["upgrade", "downgrade"] = "upgrade"
+) -> None:
+    module = "src.data.migrations"
+    if file:
+        module = f"{module}.{file}"
+
+    migrations = importlib.import_module(module)
+
+    if file:
+        qry = getattr(migrations, type_)
+    else:
+        migrations = (
+            reversed(migrations.__all__) if type_ == "downgrade" else migrations.__all__
         )
-        await conn.execute(create_todo_status_qry)
-        await conn.execute(create_task_status_qry)
-        await conn.execute(create_task_priority_qry)
-        await conn.execute(create_todos_table_qry)
-        await conn.execute(create_tasks_table_qry)
-        await conn.close()
+        qry = " ".join([getattr(migration, type_) for migration in migrations])
+
+    con = await asyncpg.connect(get_connection_url())
+    await con.execute(qry)
+    await con.close()
 
 
 async def insert_data(
@@ -137,6 +104,13 @@ async def load_tasks(con: asyncpg.Connection, size: int = 10) -> None:
         for i in range(1, size + 1)
     ]
     await insert_data(con, "tasks", colnames, values)
+
+
+async def load_all():
+    con = await asyncpg.connect(get_connection_url())
+    await load_todos(con)
+    await load_tasks(con)
+    await con.close()
 
 
 async def cleanup_table(con: asyncpg.Connection, table_name: str) -> None:
