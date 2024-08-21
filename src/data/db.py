@@ -106,13 +106,25 @@ async def load_tasks(con: asyncpg.Connection, size: int = 10) -> None:
     await insert_data(con, "tasks", colnames, values)
 
 
-async def load_all():
+async def load_all(todos_size: int=10, tasks_size:int=10):
     con = await asyncpg.connect(get_connection_url())
-    await load_todos(con)
-    await load_tasks(con)
+    await load_todos(con, todos_size)
+    await load_tasks(con, tasks_size)
     await con.close()
 
 
 async def cleanup_table(con: asyncpg.Connection, table_name: str) -> None:
     async with con.transaction():
         await con.execute(f"DELETE FROM {table_name};")
+
+async def cleanup_db()->None:
+    con = await asyncpg.connect(get_connection_url())
+    async with con.transaction():
+        await con.execute("DELETE FROM tasks; DELETE FROM todos;")
+
+async def drop_db():
+    conn = await asyncpg.connect(get_connection_url(database="postgres"))
+
+    with conn.query_logger(detailed_logger):
+        await conn.execute(f"DROP DATABASE {settings.PG_DB};")
+        await conn.close()
