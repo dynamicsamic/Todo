@@ -40,5 +40,5 @@ jobs:
 
       - name: Run tests
         run: |
-          pytest -vv -sx --log-cli-level=INFO
+          pdm run test
 
