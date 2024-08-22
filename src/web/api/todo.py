@@ -35,7 +35,11 @@ async def inject_service():
 
 @bp.after_request
 async def release_con(_request):
-    await current_app.db_pool.release(request.db_con)
+    try:
+        await current_app.db_pool.release(request.db_con)
+    except Exception as err:
+        logger.error(f"Error during db release. Error: {err}.")
+        pass
     return _request
 
 

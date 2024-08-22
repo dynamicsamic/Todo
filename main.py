@@ -22,8 +22,13 @@ async def create_db_pool():
 
 
 async def close_db_pool():
+    from asyncpg.exceptions import InterfaceError
     logger.info("Closing DB Connection Pool")
-    await app.db_pool.close()
+    try:
+        await app.db_pool.close()
+    except InterfaceError:
+        logger.info("DB Connection Pool already closed")
+        pass
 
 
 def create_app():
