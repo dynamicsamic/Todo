@@ -5,19 +5,17 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 from humps import decamelize
-from quart import Quart
 
 from main import app
 from src.domain.models import Task, Todo, UpdateTask, UpdateTodo
 from src.domain.types import TaskPriority, TaskStatus, TodoStatus
 from src.service.task import TaskService
 from src.service.todo import TodoService
-from src.settings import settings
 from src.utils import now as now_
+from tests.conftest import DEFAULT_LIMIT
 
 pytestmark = pytest.mark.asyncio
 
-DEFAULT_LIMIT = settings.DEFAULT_PAGE_LIMIT
 now = now_()
 
 valid_task = Task(
@@ -45,15 +43,15 @@ valid_todo = Todo(
 @pytest.fixture(scope="module", autouse=True)
 def db_pool():
     """
-    Databse connection pool is injected before every request processed via 
-    the `@bp.before_request` decorator. I could not find any other convinient 
-    and way to mock this injection mechanism. So I decided to mock the Quart 
-    app itself and add the mocked database connection pool to Quart class to 
-    be run tests independent from real database.
-    Since this is an autouse fixture, it will be executed before every test.
+    Databse connection pool is injected before every request processed via
+    the `@bp.before_request` decorator. I could not find any other convinient
+    and way to mock this injection mechanism. So I decided to mock the app
+    itself and add the mocked database connection pool to it to be run tests
+    independently from real database. Since this is an autouse fixture, it
+    will be executed before every test.
     """
     with patch.object(
-        Quart, "db_pool", create=True, new_callable=AsyncMock
+        app, "db_pool", create=True, new_callable=AsyncMock
     ) as mock:
         yield mock
 
