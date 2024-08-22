@@ -8,12 +8,11 @@ from src.domain.models import Task
 from src.domain.types import TaskPriority, TaskStatus
 from src.service.task import TaskService
 from src.service.validation import BadRequest, BadResponse
-from src.settings import settings
 from src.utils import now as now_
+from tests.conftest import DEFAULT_LIMIT
 
 pytestmark = pytest.mark.asyncio
 
-DEFAULT_LIMIT = settings.DEFAULT_PAGE_LIMIT
 
 now = now_()
 

@@ -8,12 +8,10 @@ from src.domain.models import Todo
 from src.domain.types import TaskPriority, TaskStatus, TodoStatus
 from src.service.todo import TodoService
 from src.service.validation import BadRequest, BadResponse
-from src.settings import settings
 from src.utils import now as now_
+from tests.conftest import DEFAULT_LIMIT
 
 pytestmark = pytest.mark.asyncio
-
-DEFAULT_LIMIT = settings.DEFAULT_PAGE_LIMIT
 
 
 now = now_()

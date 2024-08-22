@@ -15,16 +15,13 @@ from src.data.db import (
 from src.data.repository import TaskRepository, TodoRepository
 from src.data.result import TaskRow, TodoRow
 from src.domain.types import TaskPriority, TaskStatus, TodoStatus
-from src.settings import settings
 from src.utils import now
-from tests.fixtures import (
+from tests.conftest import (
     TASK_SAMPLE_SIZE,
     TODO_SAMPLE_SIZE,
 )
 
 pytestmark = pytest.mark.asyncio
-
-DEFAULT_LIMIT = settings.DEFAULT_PAGE_LIMIT
 
 
 @pytest_asyncio.fixture(scope="module")
