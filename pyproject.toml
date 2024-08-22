@@ -54,9 +54,13 @@ test = [
     "pytest-asyncio>=0.23.8",
     "pytest-cov>=5.0.0",
     "flake8>=7.1.1",
-    "isort>=5.13.2",
     "black>=24.8.0",
 ]
+
+[tool.black]
+line-length = 88
+exclude = "migrations|sql"
+
 [tool.pdm.scripts]
 init_db = "quart --app=main:app init_db"
 migrate = "quart --app=main:app migrate -f"
@@ -70,5 +74,7 @@ prod_server = "hypercorn --config hypercorn.toml main:app"
 start_dev_app = {composite = ["prepare_db","load_test_data", "dev_server"]}
 start_app = {composite = ["prepare_db", "prod_server"]}
 
-lint = {composite = ["flake8 src --exclude=src/data/migrations", "isort --check-only src", "black --check src"]}
+lint = {composite = [
+    "flake8 src --exclude=src/data/migrations,src/data/sql.py --max-line-length=88", 
+    "black --check src"]}
 test = "pytest --cov=app --cov=tests --cov-report term-missing"
