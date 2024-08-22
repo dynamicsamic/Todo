@@ -67,3 +67,6 @@ prod_server = "hypercorn --config hypercorn.toml main:app"
 # start_app = "quart --app=main:app create_test_app"
 start_dev_app = {composite = ["prepare_db","load_test_data", "dev_server"]}
 start_app = {composite = ["prepare_db", "prod_server"]}
+
+# test = "pytest --cov-report term-missing --cov=main"
+test = "pytest -vv -sx --log-cli-level=INFO"
