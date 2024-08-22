@@ -5,8 +5,5 @@ from .todo import bp as todo_bp
 
 bp = Blueprint("todos", __name__)
 
-bp.register_blueprint(todo_bp, name='todo')
-bp.register_blueprint(task_bp, name='task')
-
-# for module in ["handlers", 'task']:
-    # __import__(f"{__name__}.{module}")
+bp.register_blueprint(todo_bp, name="todo")
+bp.register_blueprint(task_bp, name="task")

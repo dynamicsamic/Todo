@@ -27,17 +27,17 @@ def validate_input_output(
     Provide complete validation for a service method.
 
     Validates input data against input model. Runs the decorated function
-    with validated arguments. Finally validates the resulting data against 
+    with validated arguments. Finally validates the resulting data against
     the output model.
 
-    Default arguments of the decorated function will be lost during the 
+    Default arguments of the decorated function will be lost during the
     execution process. Provide sane default values for the input model.
 
     Args:
         input_model: A pydantic model that validates the input data.
         output_model: A pydantic model that validates the output data.
         return_list: Flag to convert the result to a list of models.
-    
+
     >>> class SomeService:
     ...     @validate_input_output(input_model=InputModel, output_model=OutputModel)
     ...     async def some_method(self, *args, **kwargs) -> OutputModel:
@@ -64,9 +64,7 @@ def validate_input_output(
                 )
                 raise BadRequest from err
 
-            result = await func(
-                *args, **valid_data.model_dump(exclude_none=True)
-            )
+            result = await func(*args, **valid_data.model_dump(exclude_none=True))
 
             if result is None:
                 return None
@@ -109,9 +107,7 @@ def validate_query(model_type: Type[BaseModel]):
                 )
                 raise BadRequest from err
 
-            return await func(
-                *args, **valid_data.model_dump(exclude_none=True)
-            )
+            return await func(*args, **valid_data.model_dump(exclude_none=True))
 
         return wrapper
 
@@ -123,9 +119,7 @@ def validate_response(
 ) -> Callable[[Awaitable], (Awaitable)]:
     def decorator(func: Awaitable) -> Awaitable:
         @functools.wraps(func)
-        async def wrapper(
-            *args, **kwargs
-        ) -> BaseModel | list[BaseModel] | None:
+        async def wrapper(*args, **kwargs) -> BaseModel | list[BaseModel] | None:
             if len(args) > 1:
                 raise TypeError(
                     f"Function {func.__code__.co_name} takes 0 positional "

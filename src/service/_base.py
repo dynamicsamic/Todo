@@ -20,6 +20,7 @@ class Service:
     - performing basic CRUD operations;
     - validating and serializing database responses to domain models.
     """
+
     def __init__(self, repository: Repository) -> None:
         self.repo = repository
 
@@ -63,9 +64,7 @@ class Service:
         try:
             deleted = await self.repo.delete_one(pk)
         except Exception as err:
-            logger.error(
-                f"Error during instance delete. PK: {pk}. Error: {err}"
-            )
+            logger.error(f"Error during instance delete. PK: {pk}. Error: {err}")
             raise
 
         return bool(deleted)

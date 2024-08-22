@@ -74,7 +74,7 @@ async def apply_migration(
 async def insert_data(
     con: asyncpg.Connection, table_name: str, col_names: list[str], values: list[tuple]
 ) -> None:
-    query_args = f'({', '.join([f'${i}' for i in range(1, len(col_names) + 1)])})'
+    query_args = f"({', '.join([f'${i}' for i in range(1, len(col_names) + 1)])})"
     col_names = f'({", ".join(col_names)})'
     stmt = f"INSERT INTO {table_name} {col_names} values {query_args} ;"
     with con.query_logger(detailed_logger):
@@ -106,7 +106,7 @@ async def load_tasks(con: asyncpg.Connection, size: int = 10) -> None:
     await insert_data(con, "tasks", colnames, values)
 
 
-async def load_all(todos_size: int=10, tasks_size:int=10):
+async def load_all(todos_size: int = 10, tasks_size: int = 10):
     con = await asyncpg.connect(get_connection_url())
     await load_todos(con, todos_size)
     await load_tasks(con, tasks_size)
@@ -117,10 +117,12 @@ async def cleanup_table(con: asyncpg.Connection, table_name: str) -> None:
     async with con.transaction():
         await con.execute(f"DELETE FROM {table_name};")
 
-async def cleanup_db()->None:
+
+async def cleanup_db() -> None:
     con = await asyncpg.connect(get_connection_url())
     async with con.transaction():
         await con.execute("DELETE FROM tasks; DELETE FROM todos;")
+
 
 async def drop_db():
     conn = await asyncpg.connect(get_connection_url(database="postgres"))

@@ -34,8 +34,8 @@ class ConnectionManager:
     """
     Provides an asyncpg connection to the repository.
 
-    The connection should be passed to Connection Manager using 
-    `asyncpg.Pool.acquire()` without `async with` context. 
+    The connection should be passed to Connection Manager using
+    `asyncpg.Pool.acquire()` without `async with` context.
     Using `async with` will release the connection prematurely.
 
     After the context manager exits, it will realase the connection back to
@@ -83,7 +83,7 @@ class Repository:
     Class arguments that Repository subclasses must provide:
         `table: str` SQL table name
         `pk: str` Primary key column name
-        `row: DataRow` Virtually any data type capable of storing data 
+        `row: DataRow` Virtually any data type capable of storing data
             from `asyncpg.Record`. Represents one table row.
 
     >>> class UserRepository(Repository):
@@ -126,9 +126,7 @@ class Repository:
         """Fetch one record from the database based on a primary key."""
         async with self.connection as con:
             async with con.transaction():
-                res = await con.fetchrow(
-                    generate_select(self.table, self.pk), pk
-                )
+                res = await con.fetchrow(generate_select(self.table, self.pk), pk)
 
         return self._create_row(res) if res else None
 
@@ -140,7 +138,7 @@ class Repository:
         filters: dict[str, list[str]] | None = None,
     ) -> Generator[DataRow, None, None]:
         """Fetch multiple records from the database based on provided arguments.
-        
+
         >>> request = await repository.fetch_many(
         ... limit=2, offset=10, order_by=["created_at"],
         ... filters={"status": ["completed", "deleted"]}
@@ -155,9 +153,7 @@ class Repository:
         )
         return (self._create_row(item) for item in res)
 
-    async def insert_one(
-        self, **create_data: dict[str, Any]
-    ) -> DataRow | None:
+    async def insert_one(self, **create_data: dict[str, Any]) -> DataRow | None:
         """Insert a new row into the database.
         >>> new_obj = await repository.insert_one(
         ...     owner="johndoe", status='active'
@@ -172,9 +168,7 @@ class Repository:
 
         return self._create_row(res) if res else None
 
-    async def update_one(
-        self, pk: Any, update_data: dict[str, Any]
-    ) -> DataRow | None:
+    async def update_one(self, pk: Any, update_data: dict[str, Any]) -> DataRow | None:
         """Update a record in the database based on a primary key.
 
         >>> updated_obj = await repository.update_one(
@@ -252,12 +246,10 @@ class Repository:
             async with con.transaction():
                 return await con.fetch(qry, limit, offset, *args)
 
-    def _prepare_query_args(
-        self, query_args: dict[str, list[Any]], i: int = 1
-    ) -> str:
+    def _prepare_query_args(self, query_args: dict[str, list[Any]], i: int = 1) -> str:
         """Generates a 'selection from multiple values' statements joined with `AND`.
-        Columns types different from varchar are casted to their corresponding types using
-        self.type_cast table.
+        Columns types different from varchar are casted to their corresponding types
+        using self.type_cast table.
         Generally this is more efficient than using `IN` statements.
 
         >>> query_args = {
@@ -266,15 +258,14 @@ class Repository:
         ...     "priority": [TaskPriority.high, TaskPriority.low],
         ... }
         >>> self._prepare_query_args(query_args)
-        >>> 'owner = any (values $1, $2) AND status = any (values $3, $4) AND priority = any (values $5, $6)'
+        >>> 'owner = any (values $1, $2) AND status = any (values $3, $4)
+        ... AND priority = any (values $5, $6)'
         """
         parts = []
 
         for col_name, vals in query_args.items():
             col_type = self.type_cast[col_name]
-            subs = ", ".join(
-                f"(${j}{col_type})" for j in range(i, len(vals) + i)
-            )
+            subs = ", ".join(f"(${j}{col_type})" for j in range(i, len(vals) + i))
             part = f"{col_name} = any (values {subs})"
             parts.append(part)
             i += len(vals)
@@ -299,9 +290,7 @@ class TodoRepository(Repository):
     ) -> Generator[TodoRow, None, None]:
         return await super().fetch_many(limit, offset, order_by, filters)
 
-    async def fetch_one(
-        self, todo_id: int, prefetch_tasks: int = 0
-    ) -> TodoRow | None:
+    async def fetch_one(self, todo_id: int, prefetch_tasks: int = 0) -> TodoRow | None:
         """Fetch a single record from todos table.
         If `prefetch_tasks > 0`, additional database query will be executed
         to fetch related tasks. Tasks then converted to a generator of TaskRow.
@@ -315,9 +304,7 @@ class TodoRepository(Repository):
                 return None
 
             if prefetch_tasks:
-                tasks = await con.fetch(
-                    prefetch_tasks_query, todo_id, prefetch_tasks
-                )
+                tasks = await con.fetch(prefetch_tasks_query, todo_id, prefetch_tasks)
 
         if tasks:
             tasks = (TaskRow(**task) for task in tasks)

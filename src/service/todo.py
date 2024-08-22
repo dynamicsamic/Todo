@@ -35,18 +35,14 @@ class TodoService(Service):
         offset: int = 0,
         filters: dict[str, list[Any]] | None = None,
     ) -> list[Todo]:
-        return await super().get_many(
-            limit=limit, offset=offset, filters=filters
-        )
+        return await super().get_many(limit=limit, offset=offset, filters=filters)
 
     @validate_input_output(input_model=CreateTodo, output_model=Todo)
     async def create(self, **payload: Any) -> Todo | None:
         return await super().create(**payload)
 
     @validate_input_output(input_model=UpdateTodoQuery, output_model=Todo)
-    async def update(
-        self, *, todo_id: int, payload: UpdateTodo
-    ) -> Todo | None:
+    async def update(self, *, todo_id: int, payload: UpdateTodo) -> Todo | None:
         return await super().update(pk=todo_id, payload=payload)
 
     @validate_query(DeleteTodoQuery)

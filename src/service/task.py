@@ -30,18 +30,14 @@ class TaskService(Service):
         offset: int = 0,
         filters: dict[str, list[Any]] | None = None,
     ) -> list[Task]:
-        return await super().get_many(
-            limit=limit, offset=offset, filters=filters
-        )
+        return await super().get_many(limit=limit, offset=offset, filters=filters)
 
     @validate_input_output(input_model=CreateTask, output_model=Task)
     async def create(self, **payload: Any) -> Task | None:
         return await super().create(**payload)
 
     @validate_input_output(input_model=UpdateTaskQuery, output_model=Task)
-    async def update(
-        self, *, task_id: int, payload: UpdateTask
-    ) -> Task | None:
+    async def update(self, *, task_id: int, payload: UpdateTask) -> Task | None:
         return await super().update(pk=task_id, payload=payload)
 
     @validate_query(DeleteTaskQuery)

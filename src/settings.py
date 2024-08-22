@@ -15,8 +15,8 @@ class Settings(BaseSettings):
     DEFAULT_PAGE_LIMIT: int = 10
     MAX_PAGE_LIMIT: int = 100
 
-    TODO_DB_NAME: str = 'todos'
-    TASK_DB_NAME: str = 'tasks'
+    TODO_DB_NAME: str = "todos"
+    TASK_DB_NAME: str = "tasks"
 
     PG_USER: str = TEST_PG_USER
     PG_PASSWORD: str = TEST_PG_PASS

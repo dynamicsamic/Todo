@@ -20,9 +20,7 @@ class NonEmptyUpdateMixin:
     @classmethod
     def check_at_least_one_non_empty_field(cls, data: dict[str, Any]) -> Any:
         if all(val is None for val in data.values()):
-            raise ValueError(
-                "At least one field must contain a not None value"
-            )
+            raise ValueError("At least one field must contain a not None value")
         return data
 
 
@@ -50,9 +48,7 @@ class CreateTask(BaseModel):
     status: TaskStatus = TaskStatus.PENDING
     priority: TaskPriority = TaskPriority.LOW
     category: str
-    due: TZDatetime | None = Field(
-        default_factory=datetime_with_delta({"days": 1})
-    )
+    due: TZDatetime | None = Field(default_factory=datetime_with_delta({"days": 1}))
 
 
 class UpdateTask(BaseModel, NonEmptyUpdateMixin):

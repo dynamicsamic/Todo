@@ -55,9 +55,7 @@ def with_validation_error(value):
     try:
         return value
     except ValidationError as err:
-        logger.error(
-            f"invalid response from service. Reponse: {value}. Error: {err}"
-        )
+        logger.error(f"invalid response from service. Reponse: {value}. Error: {err}")
         raise
 
 
@@ -82,9 +80,7 @@ async def add_todo(data: CreateTodo) -> Todo:
 @validate_querystring(GetTodoQueryArgs)
 async def get_todo(todo_id: int, query_args: GetTodoQueryArgs) -> Todo:
     prefetch = query_args.prefetch_tasks
-    todo = await request.service.get_one(
-        todo_id=todo_id, prefetch_tasks=prefetch
-    )
+    todo = await request.service.get_one(todo_id=todo_id, prefetch_tasks=prefetch)
 
     if not todo:
         raise NotFound(f"Todo with id {todo_id} not found")
