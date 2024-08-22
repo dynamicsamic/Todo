@@ -10,11 +10,14 @@
     * web layer provides convienient client interfaces (for now only the REST API) for interacting with the application 
 * database connection pooling with asyncpg for the lifespan of the application
 * auto-generated OpenAPI schema by QuartSchema
-* exhaustive unit and end-to-end testing with pytest, unittest.Mock and coverage
+* 97% unit and end-to-end test covarage with pytest, pytest_asyncio and unittest.Mock
+* CLI commands for applying migrations and loading test data
 * Ruff linting and Black formatting
+* dependency management with PDM
+* CI with GitHub Actions
 
 ### Technologies:
+* Quart
 * Asyncpg
 * Pydantic
 * Pytest
-* Quart
