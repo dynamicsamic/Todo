@@ -1,14 +1,11 @@
 services:
   todo:
-    build:
-      context: .
+    image: dynamicsamic/todo_list:latest
     command: pdm start_app
     depends_on:
       - db
     ports:
       - 8080:8080
-    volumes:
-      - ./src:/app/src
     healthcheck:
       test: curl --fail http://localhost:8080/health || exit 1
       interval: 10s
