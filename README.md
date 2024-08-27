@@ -1,4 +1,4 @@
-# Todo list. Basic application for perfomring CRUD operations on todo lists
+<div alighn="center"> <h1 align="center">TodoList. <br/>Basic application for perfomring CRUD operations on todo lists</h3></div>
 
 ## Features
 * four layers architecture: *data* -> *service* -> *domain* -> *web*
